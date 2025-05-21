@@ -3,7 +3,7 @@ export type Result = {
   resultText: string;
 };
 
-type FrameType = {
+export type FrameType = {
   boundingCenterX: number;
   boundingCenterY: number;
   height: number;
@@ -12,15 +12,15 @@ type FrameType = {
   y: number;
 };
 
-type CornerPointsType = [{x: number; y: number}];
+export type CornerPointsType = [{x: number; y: number}];
 
-type ElementsData = [
+export type ElementsData = [
   elementCornerPoints: CornerPointsType,
   elementFrame: FrameType,
   elementText: string,
 ];
 
-type LinesData = [
+export type LinesData = [
   lineCornerPoints: CornerPointsType,
   elements: ElementsData,
   lineFrame: FrameType,
@@ -28,7 +28,7 @@ type LinesData = [
   lineText: string,
 ];
 
-type BlocksData = {
+export type BlocksData = {
   blockFrame: FrameType;
   blockCornerPoints: CornerPointsType;
   lines: LinesData;

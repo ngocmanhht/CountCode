@@ -20,7 +20,7 @@ import {AppScreen} from '../../const/app-screen';
 const InputScreen = () => {
   const [startValue, setStartValue] = useState('');
   const [endValue, setEndValue] = useState('');
-
+  console.log('a1');
   const handleScan = () => {
     // Handle scan logic here
     console.log('Scanning with values:', {startValue, endValue});
@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: AppFontSize.s16,
+    color: AppColor.black,
   },
   scanButton: {
     paddingVertical: 15,
