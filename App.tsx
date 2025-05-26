@@ -13,46 +13,49 @@ import ScannerScreen from './src/screens/scanner';
 import {ResultScreen} from './src/screens/results';
 import {AppColor} from './src/const/app-color';
 import {AppScreen} from './src/const/app-screen';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 function App(): React.JSX.Element {
   const Stack = createNativeStackNavigator();
 
   return (
     <>
-      <NavigationContainer>
-        <Stack.Navigator>
-          <Stack.Screen
-            options={{headerShown: false}}
-            name={AppScreen.InputScreen}
-            component={InputScreen}
-          />
-          <Stack.Screen
-            options={{
-              headerTitle: 'Quét mã vạch',
-              headerTitleAlign: 'center',
-              headerTintColor: AppColor.white,
-              headerBackTitle: 'Quay lại',
-              headerStyle: {
-                backgroundColor: AppColor.c1e1e1e,
-              },
-            }}
-            name={AppScreen.ScannerScreen}
-            component={ScannerScreen}
-          />
-          <Stack.Screen
-            name={AppScreen.ResultScreen}
-            component={ResultScreen}
-            options={{
-              headerTitle: 'Thông số đã quét',
-              headerTitleAlign: 'center',
-              headerTintColor: AppColor.white,
-              headerBackTitle: 'Quay lại',
-              headerStyle: {
-                backgroundColor: AppColor.primary,
-              },
-            }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <GestureHandlerRootView>
+        <NavigationContainer>
+          <Stack.Navigator>
+            <Stack.Screen
+              options={{headerShown: false}}
+              name={AppScreen.InputScreen}
+              component={InputScreen}
+            />
+            <Stack.Screen
+              options={{
+                headerTitle: 'Quét mã vạch',
+                headerTitleAlign: 'center',
+                headerTintColor: AppColor.white,
+                headerBackTitle: 'Quay lại',
+                headerStyle: {
+                  backgroundColor: AppColor.c1e1e1e,
+                },
+              }}
+              name={AppScreen.ScannerScreen}
+              component={ScannerScreen}
+            />
+            <Stack.Screen
+              name={AppScreen.ResultScreen}
+              component={ResultScreen}
+              options={{
+                headerTitle: 'Thông số đã quét',
+                headerTitleAlign: 'center',
+                headerTintColor: AppColor.white,
+                headerBackTitle: 'Quay lại',
+                headerStyle: {
+                  backgroundColor: AppColor.primary,
+                },
+              }}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </GestureHandlerRootView>
     </>
   );
 }

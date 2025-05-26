@@ -3,3 +3,8 @@ export type ScannedItem = {
   value: string;
   isScanned: boolean;
 };
+
+export type FrameBlock = {
+  width: number;
+  height: number;
+};

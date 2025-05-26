@@ -29,6 +29,22 @@ export const ResultScreen = () => {
     navigation.navigate(AppScreen.InputScreen as never);
   };
 
+  /**
+   * Generates a list of `ScannedItem` objects representing a range of values from `startValue` to `endValue`.
+   * Each item in the list indicates whether its value exists in the `scannedData` array.
+   *
+   * @remarks
+   * - The range is inclusive of both `startValue` and `endValue`.
+   * - Each `ScannedItem` contains a unique `id`, the string representation of the value, and an `isScanned` flag.
+   *
+   * @param scannedData - An array of strings representing scanned values.
+   * @param startValue - The starting value of the range (as a string).
+   * @param endValue - The ending value of the range (as a string).
+   * @returns An array of `ScannedItem` objects, each representing a value in the range and its scanned status.
+   *
+   * @dependency
+   * This value is memoized and will only recompute when `scannedData`, `startValue`, or `endValue` change.
+   */
   const list: Array<ScannedItem> = useMemo(() => {
     if (scannedData && startValue && endValue) {
       const startValueNum = parseInt(startValue, 10);
