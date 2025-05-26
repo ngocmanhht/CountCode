@@ -1,122 +1,33 @@
-import React, {useState, useEffect} from 'react';
-import {View, Text, StyleSheet, Alert, TouchableOpacity} from 'react-native';
-import {useCameraDevice, useCameraPermission} from 'react-native-vision-camera';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import React, {useEffect} from 'react';
+import {SafeAreaView, StyleSheet} from 'react-native';
+import {useCameraPermission} from 'react-native-vision-camera';
+import {useNavigation, useRoute} from '@react-navigation/native';
+import {NavigationProp} from '@react-navigation/native';
 import {AppFontSize} from '../../const/app-font-size';
-import {
-  NavigationProp,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native';
-import {AppScreen} from '../../const/app-screen';
-import {Camera} from 'react-native-vision-camera-text-recognition';
-import {Result} from '../../types/result';
-
-const SCAN_REGEX = /^\*\d{8}\*$/;
+import {TextRecognitionCamera} from '../../components/text-recognition-camera';
 
 const ScannerScreen = () => {
-  const device = useCameraDevice('back');
   const {hasPermission, requestPermission} = useCameraPermission();
-  const [isActive, setIsActive] = useState(true);
-  const [scannedValues, setScannedValues] = useState<Set<string>>(new Set());
   const navigation = useNavigation<NavigationProp<any>>();
   const route = useRoute();
   const {startValue, endValue} = route.params as {
     startValue: string;
     endValue: string;
   };
-  console.log('hasPermission', hasPermission);
+
   useEffect(() => {
     if (!hasPermission) {
       requestPermission();
     }
   }, [hasPermission, requestPermission]);
 
-  const isValidInRange = (val: string) => {
-    const num = parseInt(val, 10);
-    const start = parseInt(startValue, 10);
-    const end = parseInt(endValue, 10);
-    return num >= start && num <= end;
-  };
-
-  const handleScanResult = (result: Result) => {
-    if (!result?.blocks?.length) {
-      return;
-    }
-
-    for (const block of result.blocks) {
-      const text = block.blockText?.trim();
-      if (!text || !SCAN_REGEX.test(text)) {
-        continue;
-      }
-
-      const rawValue = text.replaceAll('*', '').trim().slice(1);
-      console.log('rawValue', rawValue);
-      if (scannedValues.has(rawValue)) {
-        showAlertOnce('Đã quét', 'Giá trị đã được quét trước đó');
-        return;
-      }
-
-      // Out of range
-      if (!isValidInRange(rawValue)) {
-        showAlertOnce(
-          'Giá trị không hợp lệ',
-          `Giá trị ${rawValue} không nằm trong khoảng ${startValue} - ${endValue}`,
-        );
-        return;
-      }
-
-      // Add valid scanned value
-      setScannedValues(prev => new Set(prev).add(rawValue));
-      showAlertOnce('Đã quét', rawValue);
-      return;
-    }
-  };
-
-  const showAlertOnce = (title: string, message: string) => {
-    setIsActive(false); // temporarily pause camera
-    Alert.alert(title, message, [
-      {
-        text: 'OK',
-        onPress: () => setIsActive(true),
-      },
-    ]);
-  };
-
-  const handleEndScan = () => {
-    setIsActive(false);
-    navigation.navigate(AppScreen.ResultScreen, {
-      scannedData: Array.from(scannedValues),
-      startValue,
-      endValue,
-    });
-  };
-
-  if (!device || !hasPermission) {
-    return (
-      <View style={styles.loading}>
-        <Text>Đang tải camera...</Text>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.cameraContainer}>
-        <Camera
-          isActive={isActive}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          options={{language: 'latin'}}
-          mode="recognize"
-          callback={(result: any) => handleScanResult(result)}
-        />
-        <View style={styles.scanFrame} />
-      </View>
-
-      <TouchableOpacity style={styles.endScanButton} onPress={handleEndScan}>
-        <Text style={styles.endScanText}>Kết thúc quét</Text>
-      </TouchableOpacity>
+      <TextRecognitionCamera
+        containerStyle={StyleSheet.absoluteFill}
+        startValue={startValue}
+        endValue={endValue}
+      />
     </SafeAreaView>
   );
 };
@@ -126,7 +37,7 @@ export default ScannerScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: 'white',
     alignItems: 'center',
   },
   backButton: {
