@@ -25,26 +25,29 @@ import {
   useNavigation,
 } from '@react-navigation/native';
 import {useIsForeground} from '../../hooks/use-is-foreground';
-import {useCallback, useRef} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import {SCREEN_HEIGHT, SCREEN_WIDTH} from '../../const/app-const';
 import {useTextRecognition} from 'react-native-vision-camera-text-recognition';
 import {TextRecognitionOptions} from 'react-native-vision-camera-text-recognition/lib/typescript/src/types';
 import {useRunOnJS, useSharedValue} from 'react-native-worklets-core';
-import {Result} from '../../types/result';
-import {AppUtils, TEN_CHARACTER_SCAN_REGEX} from '../../utils';
+import {Result, ScanType} from '../../types/result';
+import {ABF_SCAN_REGEX, AppUtils, POLYBOARD_SCAN_REGEX} from '../../utils';
 import {AppScreen} from '../../const/app-screen';
 import {FrameBlock} from '../../types/item';
 import {AppFontSize} from '../../const/app-font-size';
 import {ReanimatedCamera} from '../reanimated-camera';
+import {useToast} from '../../hooks/use-toast';
 
 export const TextRecognitionCamera = ({
   containerStyle,
   startValue,
   endValue,
+  scanType,
 }: {
   containerStyle?: StyleProp<AnimatedStyle<StyleProp<ViewStyle>>>;
   startValue: string;
   endValue: string;
+  scanType: ScanType;
 }) => {
   const {hasPermission} = useCameraPermission();
   const cameraRef = useRef<Camera>(null);
@@ -53,11 +56,13 @@ export const TextRecognitionCamera = ({
   const scanBoxLayout = useSharedValue<LayoutRectangle | null>(null);
   const cameraLayout = useSharedValue<LayoutRectangle | null>(null);
   const isHandlingData = useSharedValue(false);
+  const scanningType = useSharedValue(scanType);
   const cameraFrame = useSharedValue<FrameBlock | null>(null);
   //
   const device = useCameraDevice('back', {});
   const isFocussed = useIsFocused();
   const isForeground = useIsForeground();
+  const toast = useToast();
   const isActive = isFocussed && isForeground;
   const navigation = useNavigation<NavigationProp<any>>();
   const screenAspectRatio = SCREEN_HEIGHT / SCREEN_WIDTH;
@@ -66,9 +71,7 @@ export const TextRecognitionCamera = ({
   const {scanText} = useTextRecognition(options);
   const format = useCameraFormat(device, [
     {fps: 60},
-    // {videoAspectRatio: screenAspectRatio},
     {videoResolution: 'max'},
-    // {photoAspectRatio: screenAspectRatio},
     {photoResolution: 'max'},
   ]);
   const fps = Math.min(format?.maxFps ?? 1, 60);
@@ -115,7 +118,7 @@ export const TextRecognitionCamera = ({
     isHandlingData.value = true;
 
     let matchedBlocks = result.blocks.filter(block =>
-      TEN_CHARACTER_SCAN_REGEX.test(block.blockText),
+      POLYBOARD_SCAN_REGEX.test(block.blockText),
     );
 
     matchedBlocks = matchedBlocks.filter(block =>
@@ -149,14 +152,69 @@ export const TextRecognitionCamera = ({
         !newValues.has(rawValue) && !scannedValues.includes(rawValue);
       if (isDontExist) {
         newValues.add(rawValue);
+      } else {
+        newValues.forEach(value =>
+          toast.showSuccess(`${value} đã được quét trước đó`),
+        );
       }
     });
 
     if (newValues.size > 0) {
-      newValues.forEach(value => AppUtils.showAlertOnce('Đã quét', value));
+      newValues.forEach(value => toast.showSuccess(`Đã quét: ${value}`));
       scannedValueShared.value = [...scannedValues, ...Array.from(newValues)];
     }
     isHandlingData.value = false;
+  };
+
+  const handleScanAbf = (result: Result) => {
+    if (!result?.blocks?.length) return;
+
+    isHandlingData.value = true;
+
+    const matchedBlocks = result.blocks.filter(block =>
+      ABF_SCAN_REGEX.test(block.blockText),
+    );
+    console.log('matchedBlocks', matchedBlocks);
+
+    if (!matchedBlocks.length) {
+      isHandlingData.value = false;
+      return;
+    }
+
+    const scannedValues = scannedValueShared.value;
+
+    for (let i = 0; i < matchedBlocks.length; i++) {
+      const block = matchedBlocks[i];
+      if (!block?.blockText) continue;
+      const rawValue = block.blockText.trim();
+      const isValid =
+        rawValue &&
+        isValidInRange(rawValue) &&
+        !scannedValues.includes(rawValue) &&
+        AppUtils.isBlockInScanBox(
+          block,
+          scanBoxLayout.value!,
+          cameraLayout.value!,
+          cameraFrame.value!,
+        );
+
+      if (isValid) {
+        AppUtils.showAlert('Đã quét', rawValue, {
+          onClose: () => {
+            scannedValueShared.value = [...scannedValues, rawValue];
+            isHandlingData.value = false;
+          },
+          onDelete: () => {
+            scannedValueShared.value = scannedValues.filter(
+              value => value !== rawValue,
+            );
+            isHandlingData.value = false;
+          },
+        });
+      } else {
+        isHandlingData.value = false;
+      }
+    }
   };
 
   /**
@@ -175,9 +233,13 @@ export const TextRecognitionCamera = ({
    */
   const useHandleDataOnJS = useRunOnJS(
     (data: Result): void => {
-      handleScanResult(data);
+      if (scanningType.value === ScanType.Polyboard) {
+        handleScanResult(data);
+      } else {
+        handleScanAbf(data);
+      }
     },
-    [options, scanBoxLayout, cameraFrame, isHandlingData],
+    [options, scanBoxLayout, cameraFrame, isHandlingData, scanningType],
   );
 
   /**
@@ -251,6 +313,12 @@ export const TextRecognitionCamera = ({
     cameraLayout.value = event.nativeEvent.layout;
   };
 
+  useEffect(() => {
+    if (!!scanType && scanType !== scanningType.value) {
+      scanningType.value = scanType;
+    }
+  }, [scanType]);
+
   if (!device || !hasPermission) {
     return (
       <View style={styles.loading}>
@@ -274,7 +342,7 @@ export const TextRecognitionCamera = ({
           photoQualityBalance="quality"
           enableZoomGesture={false}
           exposure={0}
-          // enableFpsGraph={true}
+          enableFpsGraph={true}
           outputOrientation="device"
           photo={true}
           video={true}

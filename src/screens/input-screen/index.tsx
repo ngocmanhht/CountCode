@@ -1,5 +1,5 @@
 import {NavigationProp, useNavigation} from '@react-navigation/native';
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -16,22 +16,42 @@ import {AppColor} from '../../const/app-color';
 import {AppImages} from '../../const/app-images';
 import {AppFontSize} from '../../const/app-font-size';
 import {AppScreen} from '../../const/app-screen';
+import {ScanType} from '../../types/result';
+import RadioGroup, {RadioButtonProps} from 'react-native-radio-buttons-group';
 
 const InputScreen = () => {
   const [startValue, setStartValue] = useState('');
   const [endValue, setEndValue] = useState('');
-  console.log('a1');
+  const [selectedId, setSelectedId] = useState<string | undefined>('1');
+
   const handleScan = () => {
-    // Handle scan logic here
-    console.log('Scanning with values:', {startValue, endValue});
+    const scanType = values.find(value => value.id === selectedId)?.value;
     navigation.navigate(
       AppScreen.ScannerScreen as never,
       {
         startValue: startValue,
         endValue: endValue,
+        scanType: scanType ?? ScanType.Polyboard,
       } as never,
     );
   };
+
+  const values: RadioButtonProps[] = useMemo(
+    () => [
+      {
+        id: '1',
+        label: ScanType.Polyboard,
+        value: ScanType.Polyboard,
+      },
+      {
+        id: '2',
+        label: ScanType.Abf,
+        value: ScanType.Abf,
+      },
+    ],
+    [],
+  );
+
   const navigation = useNavigation<any>();
   return (
     <TouchableWithoutFeedback
@@ -80,6 +100,26 @@ const InputScreen = () => {
                   keyboardType="numeric"
                   placeholder="Nhập giá trị"
                   maxLength={7}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Mẫu tem</Text>
+                <RadioGroup
+                  radioButtons={values}
+                  onPress={setSelectedId}
+                  selectedId={selectedId}
+                  containerStyle={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  labelStyle={[
+                    styles.label,
+                    {
+                      marginBottom: 0,
+                    },
+                  ]}
                 />
               </View>
             </View>

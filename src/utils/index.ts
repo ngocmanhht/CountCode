@@ -2,7 +2,8 @@ import {Alert, Dimensions, LayoutRectangle, PixelRatio} from 'react-native';
 import {FrameBlock} from '../types/item';
 import {BlocksData} from '../types/result';
 
-export const TEN_CHARACTER_SCAN_REGEX = /^\*\d{8}\*$/;
+export const POLYBOARD_SCAN_REGEX = /^\*\d{8}\*$/;
+export const ABF_SCAN_REGEX = /^\d+$/;
 
 export class AppUtils {
   static window = Dimensions.get('window');
@@ -27,6 +28,35 @@ export class AppUtils {
         text: 'OK',
         onPress: () => {
           onClose?.();
+        },
+      },
+    ]);
+  }
+
+  static showAlert(
+    title: string,
+    message: string,
+    {
+      onClose,
+      onDelete,
+    }: {
+      onClose?: () => void;
+      onDelete?: () => void;
+    },
+  ) {
+    Alert.alert(title, message, [
+      {
+        text: 'Chấp nhận',
+        onPress: () => {
+          console.log('Chấp nhận');
+          onClose?.();
+        },
+      },
+      {
+        text: 'Xóa',
+        onPress: () => {
+          console.log('Xóa');
+          onDelete?.();
         },
       },
     ]);
@@ -59,10 +89,10 @@ export class AppUtils {
   ): boolean => {
     if (!scanBoxLayout || !cameraLayout || !frame) return false;
     // console.log('=== DEBUG PARAMETERS ===');
-    // console.log('Block frame (px):', block.blockFrame);
-    // console.log('Scan box (dp):', scanBoxLayout);
-    // console.log('Camera layout (dp):', cameraLayout);
-    // console.log('Camera frame (px):', frame);
+    console.log('Block frame (px):', block.blockFrame);
+    console.log('Scan box (dp):', scanBoxLayout);
+    console.log('Camera layout (dp):', cameraLayout);
+    console.log('Camera frame (px):', frame);
     // 1. Tính toán scale factor CHUẨN XÁC
     const imageAspect = frame.width / frame.height;
     const screenAspect = cameraLayout.width / cameraLayout.height;
@@ -98,7 +128,8 @@ export class AppUtils {
     const finalTop = blockTop - offsetY;
     const finalBottom = blockBottom - offsetY;
     // Thêm hệ số hiệu chỉnh (cần thử nghiệm)
-    const Y_CORRECTION = 50; // dp
+    // const Y_CORRECTION = 50; // dp
+    const Y_CORRECTION = 20; // dp
 
     const finalTopWithCorrection = finalTop + Y_CORRECTION;
     const finalBottomWithCorrection = finalBottom + Y_CORRECTION;
@@ -110,16 +141,16 @@ export class AppUtils {
       finalTop < scanBoxLayout.y + scanBoxLayout.height;
 
     // Debug CHI TIẾT
-    // console.log('=== FINAL CALCULATION ===');
-    // console.log('Scale factor:', scale);
-    // console.log('Block screen position:', {
-    //   left: finalLeft,
-    //   top: finalTopWithCorrection,
-    //   right: finalRight,
-    //   bottom: finalBottomWithCorrection,
-    // });
-    // console.log('Scan box position:', scanBoxLayout);
-    // console.log('Overlap result:', isInside);
+    console.log('=== FINAL CALCULATION ===');
+    console.log('Scale factor:', scale);
+    console.log('Block screen position:', {
+      left: finalLeft,
+      top: finalTopWithCorrection,
+      right: finalRight,
+      bottom: finalBottomWithCorrection,
+    });
+    console.log('Scan box position:', scanBoxLayout);
+    console.log('Overlap result:', isInside);
 
     return isInside;
   };

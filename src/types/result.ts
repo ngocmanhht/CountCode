@@ -35,3 +35,8 @@ export type BlocksData = {
   blockLanguages: string[] | [];
   blockText: string;
 };
+
+export enum ScanType {
+  Polyboard = 'MẪU POLYBOARD',
+  Abf = 'MẪU ABF',
+}

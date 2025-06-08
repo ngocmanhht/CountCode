@@ -5,14 +5,16 @@ import {useNavigation, useRoute} from '@react-navigation/native';
 import {NavigationProp} from '@react-navigation/native';
 import {AppFontSize} from '../../const/app-font-size';
 import {TextRecognitionCamera} from '../../components/text-recognition-camera';
+import {ScanType} from '../../types/result';
 
 const ScannerScreen = () => {
   const {hasPermission, requestPermission} = useCameraPermission();
   const navigation = useNavigation<NavigationProp<any>>();
   const route = useRoute();
-  const {startValue, endValue} = route.params as {
+  const {startValue, endValue, scanType} = route.params as {
     startValue: string;
     endValue: string;
+    scanType: ScanType;
   };
 
   useEffect(() => {
@@ -27,6 +29,7 @@ const ScannerScreen = () => {
         containerStyle={StyleSheet.absoluteFill}
         startValue={startValue}
         endValue={endValue}
+        scanType={scanType}
       />
     </SafeAreaView>
   );

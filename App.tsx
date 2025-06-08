@@ -14,6 +14,7 @@ import {ResultScreen} from './src/screens/results';
 import {AppColor} from './src/const/app-color';
 import {AppScreen} from './src/const/app-screen';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import Toast from 'react-native-toast-message';
 function App(): React.JSX.Element {
   const Stack = createNativeStackNavigator();
 
@@ -56,6 +57,7 @@ function App(): React.JSX.Element {
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>
+      <Toast />
     </>
   );
 }
