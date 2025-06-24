@@ -25,18 +25,24 @@ import {
   useNavigation,
 } from '@react-navigation/native';
 import {useIsForeground} from '../../hooks/use-is-foreground';
-import {useCallback, useEffect, useRef} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {SCREEN_HEIGHT, SCREEN_WIDTH} from '../../const/app-const';
 import {useTextRecognition} from 'react-native-vision-camera-text-recognition';
 import {TextRecognitionOptions} from 'react-native-vision-camera-text-recognition/lib/typescript/src/types';
 import {useRunOnJS, useSharedValue} from 'react-native-worklets-core';
-import {Result, ScanType} from '../../types/result';
-import {ABF_SCAN_REGEX, AppUtils, POLYBOARD_SCAN_REGEX} from '../../utils';
+import {BlocksData, Result, ScanType} from '../../types/result';
+import {
+  ABF_SCAN_REGEX,
+  appUtils,
+  AppUtils,
+  POLYBOARD_SCAN_REGEX,
+} from '../../utils';
 import {AppScreen} from '../../const/app-screen';
 import {FrameBlock} from '../../types/item';
 import {AppFontSize} from '../../const/app-font-size';
 import {ReanimatedCamera} from '../reanimated-camera';
 import {useToast} from '../../hooks/use-toast';
+import {appLogger} from '../../logger/app-logger';
 
 export const TextRecognitionCamera = ({
   containerStyle,
@@ -53,12 +59,13 @@ export const TextRecognitionCamera = ({
   const cameraRef = useRef<Camera>(null);
   // shared value use between ui thread and native thread
   const scannedValueShared = useSharedValue<string[]>([]);
+
   const scanBoxLayout = useSharedValue<LayoutRectangle | null>(null);
   const cameraLayout = useSharedValue<LayoutRectangle | null>(null);
   const isHandlingData = useSharedValue(false);
   const scanningType = useSharedValue(scanType);
   const cameraFrame = useSharedValue<FrameBlock | null>(null);
-  //
+  const [isShow, setIsShow] = useState(false);
   const device = useCameraDevice('back', {});
   const isFocussed = useIsFocused();
   const isForeground = useIsForeground();
@@ -102,19 +109,26 @@ export const TextRecognitionCamera = ({
   );
 
   /**
-   * Handles the result of a text recognition scan. If the result is valid, and
-   * contains blocks with text that matches the 10 character scan regex, and
-   * are within the scan box, it will add the values to the list of scanned
-   * values.
+   * Handles the result of text recognition.
+   * It will check if the blocks match the regex of Polyboard, filter out the blocks that are not in the scan box,
+   * and add new values to the list of scanned values, or mark as duplicate if the value already exists in the list.
+   * The UI will be updated accordingly.
    *
-   * Also, it will show an alert for each new value that is not already in the
-   * list of scanned values.
+   * @param result - The result of text recognition, containing the list of blocks.
+   * @returns A promise that resolves when the handling is done.
    *
-   * @param result the result of the text recognition scan
+   * @remarks
+   * - The function will not do anything if the result is empty.
+   * - The function will not do anything if the result contains no blocks that match the regex of Polyboard.
+   * - The function will not do anything if the result contains no blocks that are in the scan box.
+   * - The function will not do anything if the result contains no new values that are not in the list of scanned values.
+   * - The function will update the UI by showing a toast for each new value, and update the list of scanned values.
+   * - The function will wait for 1 second between each toast to avoid spamming the user.
    */
-  const handleScanResult = (result: Result) => {
-    console.log('result', result);
+  const handleScanPolyBoardResult = async (result: Result) => {
+    appLogger.log('result', result);
     if (!result?.blocks?.length) return;
+
     isHandlingData.value = true;
 
     let matchedBlocks = result.blocks.filter(block =>
@@ -122,7 +136,7 @@ export const TextRecognitionCamera = ({
     );
 
     matchedBlocks = matchedBlocks.filter(block =>
-      AppUtils.isBlockInScanBox(
+      appUtils.isBlockInScanBox(
         block,
         scanBoxLayout.value!,
         cameraLayout.value!,
@@ -148,77 +162,107 @@ export const TextRecognitionCamera = ({
       if (!rawValue) return;
 
       if (!isValidInRange(rawValue)) return;
+
       const isDontExist =
         !newValues.has(rawValue) && !scannedValues.includes(rawValue);
+
       if (isDontExist) {
         newValues.add(rawValue);
-      } else {
-        newValues.forEach(value =>
-          toast.showSuccess(`${value} đã được quét trước đó`),
-        );
+      }
+
+      if (scannedValues.includes(rawValue)) {
+        newValues.add(`duplicate:${rawValue}`);
       }
     });
 
-    if (newValues.size > 0) {
-      newValues.forEach(value => toast.showSuccess(`Đã quét: ${value}`));
-      scannedValueShared.value = [...scannedValues, ...Array.from(newValues)];
+    for (const value of newValues) {
+      const isDuplicate =
+        typeof value === 'string' && value.startsWith('duplicate:');
+      const raw = isDuplicate ? value.replace('duplicate:', '') : value;
+      if (isDuplicate) {
+        toast.showInfo(`${raw} đã được quét trước đó`);
+      } else {
+        toast.showSuccess(`Đã quét: ${raw}`);
+      }
+
+      await AppUtils.delay(1000);
     }
+
+    scannedValueShared.value = [
+      ...scannedValues,
+      ...Array.from(newValues).filter(v => !`${v}`.startsWith('duplicate:')),
+    ];
+
     isHandlingData.value = false;
   };
 
-  const handleScanAbf = (result: Result) => {
+  const handleScanAbf = async (result: Result) => {
+    console.log('abf result', result);
+
     if (!result?.blocks?.length) return;
 
     isHandlingData.value = true;
 
-    const matchedBlocks = result.blocks.filter(block =>
-      ABF_SCAN_REGEX.test(block.blockText),
-    );
-    console.log('matchedBlocks', matchedBlocks);
+    const scannedValues = scannedValueShared.value;
 
-    if (!matchedBlocks.length) {
+    const matchSet = new Set<BlocksData>(
+      result.blocks.filter(block => {
+        const rawValue = block.blockText.trim();
+        return (
+          ABF_SCAN_REGEX.test(rawValue) &&
+          isValidInRange(rawValue) &&
+          appUtils.isBlockInScanBox(
+            block,
+            scanBoxLayout.value!,
+            cameraLayout.value!,
+            cameraFrame.value!,
+          )
+        );
+      }),
+    );
+
+    const matchedBlocks = Array.from(matchSet);
+
+    if (!matchedBlocks.length || matchedBlocks.length <= 1) {
       isHandlingData.value = false;
       return;
     }
 
-    const scannedValues = scannedValueShared.value;
-
-    for (let i = 0; i < matchedBlocks.length; i++) {
-      const block = matchedBlocks[i];
-      if (!block?.blockText) continue;
-      const rawValue = block.blockText.trim();
-      const isValid =
-        rawValue &&
-        isValidInRange(rawValue) &&
-        !scannedValues.includes(rawValue) &&
-        AppUtils.isBlockInScanBox(
-          block,
+    const sortedBlocks = [
+      appUtils
+        .getSortedBlocksInScanBox(
+          matchedBlocks,
           scanBoxLayout.value!,
           cameraLayout.value!,
           cameraFrame.value!,
-        );
+        )
+        .at(0),
+    ];
+    const uniqueValues = [
+      ...new Set(sortedBlocks.map(b => b!.blockText.trim())),
+    ];
 
-      if (isValid) {
-        AppUtils.showAlert('Đã quét', rawValue, {
-          onClose: () => {
-            scannedValueShared.value = [...scannedValues, rawValue];
-            isHandlingData.value = false;
-          },
-          onDelete: () => {
-            scannedValueShared.value = scannedValues.filter(
-              value => value !== rawValue,
-            );
-            isHandlingData.value = false;
-          },
-        });
+    await processAlertsSequentially(uniqueValues);
+  };
+
+  const processAlertsSequentially = async (values: string[]) => {
+    for (const value of values) {
+      const isDuplicate = scannedValueShared.value.includes(value);
+      if (isDuplicate) {
+        toast.showInfo(`${value} đã được quét trước đó`);
       } else {
-        isHandlingData.value = false;
+        toast.showSuccess(`Đã quét: ${value}`);
+        scannedValueShared.value = [...scannedValueShared.value, value];
       }
+
+      await AppUtils.delay(1000);
     }
+
+    isHandlingData.value = false;
   };
 
   /**
-   * A callback hook that runs the provided JavaScript handler (`handleScanResult`)
+   * A callback hook that runs the provided JavaScript handler (`handleScanPolyBoardResult`)
    * when the `useRunOnJS` event is triggered with a `Result` object.
    *
    * @remarks
@@ -233,8 +277,14 @@ export const TextRecognitionCamera = ({
    */
   const useHandleDataOnJS = useRunOnJS(
     (data: Result): void => {
+      if (
+        cameraFrame?.value?.height &&
+        cameraFrame?.value?.height < appUtils.logicalHeight
+      ) {
+        return;
+      }
       if (scanningType.value === ScanType.Polyboard) {
-        handleScanResult(data);
+        handleScanPolyBoardResult(data);
       } else {
         handleScanAbf(data);
       }
@@ -306,6 +356,7 @@ export const TextRecognitionCamera = ({
   };
 
   const onScanBoxLayout = (event: LayoutChangeEvent) => {
+    console.log('onScanBoxLayout', event.nativeEvent.layout);
     scanBoxLayout.value = event.nativeEvent.layout;
   };
 
@@ -339,19 +390,25 @@ export const TextRecognitionCamera = ({
           onError={onError}
           format={format}
           fps={fps}
-          photoQualityBalance="quality"
-          enableZoomGesture={false}
+          photoQualityBalance="speed"
+          enableZoomGesture={true}
           exposure={0}
           enableFpsGraph={true}
           outputOrientation="device"
           photo={true}
           video={true}
+          zoom={30}
           frameProcessor={frameProcessor}
           resizeMode={'cover'}
           pixelFormat="yuv"
         />
+        {scanType == ScanType.Polyboard && (
+          <View onLayout={onScanBoxLayout} style={[styles.scanBox]} />
+        )}
 
-        <View onLayout={onScanBoxLayout} style={[styles.scanBox]} />
+        {scanType == ScanType.Abf && (
+          <View onLayout={onScanBoxLayout} style={[styles.abfScanBox]} />
+        )}
       </Reanimated.View>
       <TouchableOpacity style={styles.endScanButton} onPress={handleEndScan}>
         <Text style={styles.endScanText}>Kết thúc quét</Text>
@@ -376,6 +433,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 8,
     zIndex: 100,
+  },
+  abfScanBox: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.3,
+    width: SCREEN_WIDTH * 0.4,
+    height: SCREEN_HEIGHT * 0.2,
+    borderColor: 'red',
+    borderWidth: 2,
+    borderRadius: 8,
+    zIndex: 100,
+    alignSelf: 'center',
   },
   endScanButton: {
     flexDirection: 'row',

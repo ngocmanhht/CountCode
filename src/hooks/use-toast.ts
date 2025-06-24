@@ -8,6 +8,7 @@ export const useToast = () => {
       type: 'success',
       text2: message,
       text2Style: text2Style,
+      visibilityTime: 2000,
     });
   };
 
@@ -16,13 +17,16 @@ export const useToast = () => {
       type: 'info',
       text2: message,
       text2Style: text2Style,
+      visibilityTime: 2000,
     });
   };
+
   const showError = (message: string) => {
     Toast.show({
       type: 'error',
       text2: message,
       text2Style: text2Style,
+      visibilityTime: 2000,
     });
   };
 
@@ -31,5 +35,5 @@ export const useToast = () => {
 
 const text2Style: StyleProp<TextStyle> = {
   fontSize: 14,
-  color: AppColor.gray,
+  color: AppColor.black,
 };

@@ -74,22 +74,27 @@ export const ResultScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.title}>Những giá trị thiếu:</Text>
         <View style={styles.table}>
-          {list?.map(i => (
-            <View
-              key={`cell-${i.id}`}
-              style={[
-                styles.cell,
-                {
-                  borderWidth: 1,
-                  backgroundColor: i.isScanned ? AppColor.white : AppColor.gray,
-                  borderRadius: 8,
-                  borderColor: AppColor.gray,
-                },
-              ]}>
-              <Text style={styles.cellText}>{i.value}</Text>
-            </View>
-          ))}
+          {list
+            ?.filter(i => i.isScanned == false)
+            ?.map(i => (
+              <View
+                key={`cell-${i.id}`}
+                style={[
+                  styles.cell,
+                  {
+                    borderWidth: 1,
+                    backgroundColor: i.isScanned
+                      ? AppColor.white
+                      : AppColor.gray,
+                    borderRadius: 8,
+                    borderColor: AppColor.gray,
+                  },
+                ]}>
+                <Text style={styles.cellText}>{i.value}</Text>
+              </View>
+            ))}
         </View>
       </ScrollView>
       <TouchableOpacity style={styles.newDataButton} onPress={handleNewData}>

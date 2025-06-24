@@ -8,10 +8,13 @@ export const ABF_SCAN_REGEX = /^\d+$/;
 export class AppUtils {
   static window = Dimensions.get('window');
 
-  static get logicalWidth() {
+  static delay = (ms: number) =>
+    new Promise(resolve => setTimeout(resolve, ms));
+
+  get logicalWidth() {
     return AppUtils.window.width;
   }
-  static get logicalHeight() {
+  get logicalHeight() {
     return AppUtils.window.height;
   }
 
@@ -63,95 +66,230 @@ export class AppUtils {
   }
 
   /**
-   * Determines whether a given block is inside the scan box area on the camera preview,
-   * accounting for scaling, cropping (due to `resizeMode: 'cover'`), and coordinate transformations.
+   * Determines whether a given block is inside or overlaps with the scan box area on the screen.
    *
-   * This function performs the following steps:
-   * 1. Calculates the accurate scale factor between the camera frame and the screen layout.
-   * 2. Converts the block's coordinates from image space to screen space, including Y-axis inversion.
-   * 3. Computes cropping offsets introduced by the cover mode.
-   * 4. Adjusts the block's screen coordinates by the calculated offsets and an optional Y correction.
-   * 5. Checks if the adjusted block rectangle overlaps with the scan box rectangle.
+   * This function converts the block's bounding box from image coordinates to screen coordinates,
+   * taking into account the aspect ratio, scaling, and cropping applied by the camera preview.
+   * It then checks if the transformed block overlaps with the scan box region.
    *
-   * Debug information is logged at each step for troubleshooting.
-   *
-   * @param block - The block data containing its frame in image (pixel) coordinates.
-   * @param scanBoxLayout - The layout rectangle of the scan box in screen (dp) coordinates.
-   * @param cameraLayout - The layout rectangle of the camera preview in screen (dp) coordinates.
-   * @param frame - The frame information of the camera image in pixel coordinates.
-   * @returns `true` if the block is at least partially inside the scan box area; otherwise, `false`.
+   * @param block - The block data containing its frame in image coordinates.
+   * @param scanBoxLayout - The layout rectangle of the scan box in screen coordinates.
+   * @param cameraLayout - The layout rectangle of the camera preview in screen coordinates.
+   * @param frame - The frame information of the image, including width and height.
+   * @returns `true` if the block overlaps with the scan box area; otherwise, `false`.
    */
-  static isBlockInScanBox = (
+
+  isBlockInScanBox = (
     block: BlocksData,
     scanBoxLayout: LayoutRectangle | null,
     cameraLayout: LayoutRectangle | null,
     frame: FrameBlock | null,
   ): boolean => {
     if (!scanBoxLayout || !cameraLayout || !frame) return false;
-    // console.log('=== DEBUG PARAMETERS ===');
-    console.log('Block frame (px):', block.blockFrame);
-    console.log('Scan box (dp):', scanBoxLayout);
-    console.log('Camera layout (dp):', cameraLayout);
-    console.log('Camera frame (px):', frame);
-    // 1. Tính toán scale factor CHUẨN XÁC
-    const imageAspect = frame.width / frame.height;
-    const screenAspect = cameraLayout.width / cameraLayout.height;
 
-    // Scale factor thực tế (đã tính toán crop do resizeMode 'cover')
+    const pixelRatio = PixelRatio.get();
+
+    const imageWidthDp = frame.width / pixelRatio;
+    const imageHeightDp = frame.height / pixelRatio;
+
+    const imageAspectRatio = imageWidthDp / imageHeightDp;
+    const screenAspectRatio = cameraLayout.width / cameraLayout.height;
+
     const scale =
-      imageAspect > screenAspect
-        ? cameraLayout.height / (frame.height / PixelRatio.get())
-        : cameraLayout.width / (frame.width / PixelRatio.get());
+      imageAspectRatio > screenAspectRatio
+        ? cameraLayout.height / imageHeightDp
+        : cameraLayout.width / imageWidthDp;
 
-    // 2. Tính tọa độ block TRÊN MÀN HÌNH (đã bao gồm crop offset)
-    const blockLeft = block.blockFrame.x * scale;
-    const blockRight = (block.blockFrame.x + block.blockFrame.width) * scale;
+    const offsetX =
+      imageAspectRatio > screenAspectRatio
+        ? (imageWidthDp * scale - cameraLayout.width) / 2
+        : 0;
 
-    // Đảo chiều Y và tính toán chính xác vị trí
-    const blockScreenY =
-      frame.height - block.blockFrame.y - block.blockFrame.height;
-    const blockTop = blockScreenY * scale;
-    const blockBottom = (blockScreenY + block.blockFrame.height) * scale;
+    const offsetY =
+      imageAspectRatio <= screenAspectRatio
+        ? (imageHeightDp * scale - cameraLayout.height) / 2
+        : 0;
 
-    // 3. Tính toán OFFSET do ảnh bị crop (resizeMode cover)
-    let offsetX = 0,
-      offsetY = 0;
-    if (imageAspect > screenAspect) {
-      offsetX = (frame.width * scale - cameraLayout.width) / 2;
-    } else {
-      offsetY = (frame.height * scale - cameraLayout.height) / 2;
-    }
+    // Convert corner points (pixel) → screen (dp)
+    const transformedPoints: Point[] = block.blockCornerPoints.map(
+      (p: Point) => {
+        const x = (p.x / pixelRatio) * scale - offsetX;
+        const y = (p.y / pixelRatio) * scale - offsetY;
+        return {x, y};
+      },
+    );
 
-    // 4. Tọa độ FINAL sau khi hiệu chỉnh
-    const finalLeft = blockLeft - offsetX;
-    const finalRight = blockRight - offsetX;
-    const finalTop = blockTop - offsetY;
-    const finalBottom = blockBottom - offsetY;
-    // Thêm hệ số hiệu chỉnh (cần thử nghiệm)
-    // const Y_CORRECTION = 50; // dp
-    const Y_CORRECTION = 20; // dp
+    // Tính bounding box của các corner points
+    const xs = transformedPoints.map(p => p.x);
+    const ys = transformedPoints.map(p => p.y);
 
-    const finalTopWithCorrection = finalTop + Y_CORRECTION;
-    const finalBottomWithCorrection = finalBottom + Y_CORRECTION;
-    // 5. Kiểm tra overlap với scan box
-    const isInside =
-      finalRight > scanBoxLayout.x &&
-      finalLeft < scanBoxLayout.x + scanBoxLayout.width &&
-      finalBottom > scanBoxLayout.y &&
-      finalTop < scanBoxLayout.y + scanBoxLayout.height;
+    const blockRect = {
+      left: Math.min(...xs),
+      right: Math.max(...xs),
+      top: Math.min(...ys),
+      bottom: Math.max(...ys),
+    };
 
-    // Debug CHI TIẾT
-    console.log('=== FINAL CALCULATION ===');
-    console.log('Scale factor:', scale);
-    console.log('Block screen position:', {
-      left: finalLeft,
-      top: finalTopWithCorrection,
-      right: finalRight,
-      bottom: finalBottomWithCorrection,
-    });
-    console.log('Scan box position:', scanBoxLayout);
-    console.log('Overlap result:', isInside);
+    const isOverlap =
+      blockRect.right > scanBoxLayout.x &&
+      blockRect.left < scanBoxLayout.x + scanBoxLayout.width &&
+      blockRect.bottom > scanBoxLayout.y &&
+      blockRect.top < scanBoxLayout.y + scanBoxLayout.height;
 
-    return isInside;
+    // Debug
+    console.log('=== BLOCK CORNER CHECK ===');
+    console.log('Scale:', scale);
+    console.log('Offset:', {offsetX, offsetY});
+    console.log('Corner points:', transformedPoints);
+    console.log('Bounding rect:', blockRect);
+    console.log('Scan box:', scanBoxLayout);
+    console.log('Is inside:', isOverlap);
+
+    return isOverlap;
   };
+
+  // getSortedBlocksInScanBox(
+  //   blocks: BlocksData[],
+  //   scanBoxLayout: LayoutRectangle | null,
+  //   cameraLayout: LayoutRectangle | null,
+  //   frame: FrameBlock | null,
+  // ): BlocksData[] {
+  //   if (!scanBoxLayout || !cameraLayout || !frame || !blocks) return [];
+
+  //   const pixelRatio = PixelRatio.get();
+
+  //   const imageWidthDp = frame.width / pixelRatio;
+  //   const imageHeightDp = frame.height / pixelRatio;
+
+  //   const imageAspectRatio = imageWidthDp / imageHeightDp;
+  //   const screenAspectRatio = cameraLayout.width / cameraLayout.height;
+
+  //   const scale =
+  //     imageAspectRatio > screenAspectRatio
+  //       ? cameraLayout.height / imageHeightDp
+  //       : cameraLayout.width / imageWidthDp;
+
+  //   const offsetX =
+  //     imageAspectRatio > screenAspectRatio
+  //       ? (imageWidthDp * scale - cameraLayout.width) / 2
+  //       : 0;
+
+  //   const offsetY =
+  //     imageAspectRatio <= screenAspectRatio
+  //       ? (imageHeightDp * scale - cameraLayout.height) / 2
+  //       : 0;
+
+  //   const blocksInScanBox = blocks
+  //     ?.map(block => {
+  //       const transformedPoints = block?.blockCornerPoints.map(p => {
+  //         const x = (p.x / pixelRatio) * scale - offsetX;
+  //         const y = (p.y / pixelRatio) * scale - offsetY;
+  //         return {x, y};
+  //       });
+
+  //       const xs = transformedPoints?.map(p => p.x);
+  //       const ys = transformedPoints?.map(p => p.y);
+
+  //       const blockRect: ScreenRect = {
+  //         left: Math.min(...xs),
+  //         right: Math.max(...xs),
+  //         top: Math.min(...ys),
+  //         bottom: Math.max(...ys),
+  //       };
+
+  //       const isOverlap =
+  //         blockRect.right > scanBoxLayout.x &&
+  //         blockRect.left < scanBoxLayout.x + scanBoxLayout.width &&
+  //         blockRect.bottom > scanBoxLayout.y &&
+  //         blockRect.top < scanBoxLayout.y + scanBoxLayout.height;
+
+  //       return isOverlap ? {block, top: blockRect.top} : null;
+  //     })
+  //     .filter((item): item is {block: BlocksData; top: number} => item !== null)
+  //     .sort((a, b) => a.top - b.top);
+
+  //   return blocksInScanBox.map(item => item.block);
+  // }
+  getSortedBlocksInScanBox(
+    blocks: BlocksData[],
+    scanBoxLayout: LayoutRectangle | null,
+    cameraLayout: LayoutRectangle | null,
+    frame: FrameBlock | null,
+  ): BlocksData[] {
+    if (!scanBoxLayout || !cameraLayout || !frame || !blocks) return [];
+
+    const pixelRatio = PixelRatio.get();
+
+    const imageWidthDp = frame.width / pixelRatio;
+    const imageHeightDp = frame.height / pixelRatio;
+
+    const imageAspectRatio = imageWidthDp / imageHeightDp;
+    const screenAspectRatio = cameraLayout.width / cameraLayout.height;
+
+    const scale =
+      imageAspectRatio > screenAspectRatio
+        ? cameraLayout.height / imageHeightDp
+        : cameraLayout.width / imageWidthDp;
+
+    const offsetX =
+      imageAspectRatio > screenAspectRatio
+        ? (imageWidthDp * scale - cameraLayout.width) / 2
+        : 0;
+
+    const offsetY =
+      imageAspectRatio <= screenAspectRatio
+        ? (imageHeightDp * scale - cameraLayout.height) / 2
+        : 0;
+
+    const blocksInScanBox = blocks
+      ?.map(block => {
+        const transformedPoints = block.blockCornerPoints.map(p => {
+          const x = (p.x / pixelRatio) * scale - offsetX;
+          const y = (p.y / pixelRatio) * scale - offsetY;
+          return {x, y};
+        });
+
+        const ys = transformedPoints.map(p => p.y);
+        const topY = Math.min(...ys); // Stable & works for top-down scan
+
+        const xs = transformedPoints.map(p => p.x);
+        const blockRect: ScreenRect = {
+          left: Math.min(...xs),
+          right: Math.max(...xs),
+          top: Math.min(...ys),
+          bottom: Math.max(...ys),
+        };
+
+        const isOverlap =
+          blockRect.right > scanBoxLayout.x &&
+          blockRect.left < scanBoxLayout.x + scanBoxLayout.width &&
+          blockRect.bottom > scanBoxLayout.y &&
+          blockRect.top < scanBoxLayout.y + scanBoxLayout.height;
+
+        return isOverlap ? {block, top: topY} : null;
+      })
+      .filter((item): item is {block: BlocksData; top: number} => item !== null)
+      .sort((a, b) => a.top - b.top)
+      .map(item => item.block);
+    return blocksInScanBox;
+  }
 }
+
+type ScreenRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Block {
+  blockText: string;
+  blockCornerPoints: Point[];
+}
+
+export const appUtils = new AppUtils();
