@@ -16,7 +16,6 @@ const ScannerScreen = () => {
     endValue: string;
     scanType: ScanType;
   };
-
   useEffect(() => {
     if (!hasPermission) {
       requestPermission();

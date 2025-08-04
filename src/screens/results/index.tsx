@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,17 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import {AppColor} from '../../const/app-color';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {AppFontSize} from '../../const/app-font-size';
 import {AppScreen} from '../../const/app-screen';
 import {ScannedItem} from '../../types/item';
+import {IRecord} from '../../types/record';
+import Modal from 'react-native-modal';
+import {asyncStorageService} from '../../services/async-storage';
+import {useToast} from '../../hooks/use-toast';
 
 export const ResultScreen = () => {
   const route = useRoute();
@@ -23,10 +28,27 @@ export const ResultScreen = () => {
   const scannedData = params?.scannedData;
   const startValue = params?.startValue;
   const endValue = params?.endValue;
+  const [isShowModal, setIsShowModal] = useState(false);
 
   const navigation = useNavigation();
   const handleNewData = () => {
     navigation.navigate(AppScreen.InputScreen as never);
+  };
+  const toast = useToast();
+  const handleSave = async () => {
+    const record: IRecord = {
+      id: new Date().getMilliseconds().toString(),
+      createdDate: new Date().toString(),
+      createdName: 'User',
+      data: list,
+    };
+    try {
+      await asyncStorageService.saveRecord(record);
+      toast.showSuccess('Lưu bản nháp thành công');
+      navigation.navigate(AppScreen.InputScreen as never);
+    } catch (error) {
+      toast.showSuccess('Có lỗi xảy ra vui lòng thử lại sau ');
+    }
   };
 
   /**
@@ -97,9 +119,14 @@ export const ResultScreen = () => {
             ))}
         </View>
       </ScrollView>
-      <TouchableOpacity style={styles.newDataButton} onPress={handleNewData}>
-        <Text style={styles.newDataButtonText}>Nhập dữ liệu mới</Text>
-      </TouchableOpacity>
+      <View style={{flexDirection: 'row'}}>
+        <TouchableOpacity style={styles.newDataButton} onPress={handleNewData}>
+          <Text style={styles.newDataButtonText}>Nhập dữ liệu mới</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.newDataButton} onPress={handleSave}>
+          <Text style={styles.newDataButtonText}>Lưu nháp</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 };
@@ -147,6 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginHorizontal: 20,
+    flex: 1,
     marginBottom: 20,
   },
   newDataButtonText: {

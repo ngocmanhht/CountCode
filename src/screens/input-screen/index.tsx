@@ -136,6 +136,19 @@ const InputScreen = () => {
               onPress={handleScan}>
               <Text style={styles.scanButtonText}>Quét ngay</Text>
             </TouchableOpacity>
+            <View style={{height: 20}} />
+            <TouchableOpacity
+              style={[
+                styles.scanButton,
+                {
+                  backgroundColor: AppColor.white,
+                },
+              ]}
+              onPress={() => {
+                navigation.navigate(AppScreen.HistoryScreen as never);
+              }}>
+              <Text style={styles.scanButtonText}>Xem lịch sử quét</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
